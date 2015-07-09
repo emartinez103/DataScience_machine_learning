@@ -1,0 +1,98 @@
+---
+title: "Machine Learning Assigment"
+author: " Endika"
+date: "7 de julio de 2015"
+output: html_document
+---
+I will set the working directory and download the data.
+
+```{r}
+
+setwd("/Users/endika/Downloads")
+testing <- read.csv("~/Downloads/pml-testing.csv")
+training <- read.csv("~/Downloads/pml-training.csv")
+library(caret)
+```
+
+I will begin the PreProcesses: I will omit the variables with too many NA´s and Little variance.
+
+```{r}
+
+#Remove near 0 variability
+
+nsv <- nearZeroVar(training,saveMetrics=TRUE)
+View(training)
+training_no_na <- training[,!nsv$nzv]
+testing_no_na <- testing[,!nsv$nzv]
+View(training_no_na)
+# Remove unnecessary columns
+colRm_train <- c("X","user_name", "cvtd_timestamp","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timesta
+ mp","num_window")
+colRm_test <- c("X","user_name","cvtd_timestamp","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestam
+ p","num_window","problem_id")
+training_colRm <- training_no_na[,!(names(training_no_na) %in% colRm_train)]
+testing_colRm <- testing_no_na[,!(names(testing_no_na) %in% colRm_test)]
+View(testing_colRm)
+#Remove Variables with too many NA´S
+
+training_colRm<- training_colRm[ , colSums(is.na(training_colRm)) == 0]
+testing_colRm <- testing_colRm[,(colSums(is.na(testing_colRm)) == 0)]
+View(training_colRm)
+View(testing_colRm)
+```
+
+Now its time to split the training set into training and validating set. Then we will test our predictor to the test set.
+```{r}
+inTrain <- createDataPartition(y=training_colRm$classe, p=0.7, list=F)
+training_clean <- training_colRm[inTrain,]
+validation_clean <- training_colRm[-inTrain,];validation_clean  <- validation_clean
+training_clean$row.names <- NULL
+validation_clean$row.names <- NULL
+
+View(validation_clean[,1])
+```
+
+In order to finf the best algorithm, I will test the correlation to see if there is a strongly correlated variable and use linear regresssion model. It´s not the case so i will use Random Forest
+```{r}
+#lets chechk the corralation between the variables to see if "lm" is apropiate
+cor <- abs(sapply(colnames(training_clean[, -ncol(training)]), function(x) 
+          cor(as.numeric(training_clean[, x]), as.numeric(training_clean$classe)
+              , method = "spearman")))
+head(cor,4)
+```
+
+I will fit the model using the train function. I will do ***crossValidation to stimate the eroor***. I will do 4-folds cross validation as an argument in the train function.
+```{r}
+library(randomForest)
+set.seed(1234)
+#We will do cross validation in 4 times
+rfFit <- train(classe ~  ., method = "rf", data = training_clean, importance = T, trControl = trainControl(method = "cv", number = 4))
+
+```
+Its time to see the results obtained applying the predictor to the validationset to spect the ***out-sample error***
+
+```{r}
+validation_pred <- predict(rfFit, newdata=validation_clean)
+# Check model performance
+confusionMatrix(validation_pred,validation_clean$classe)
+```
+
+
+
+
+
+Last I will test the model in the testing set, and create the tables
+```{r}
+predict(rfFit,testing_colRm)
+
+pml_write_files = function(x){
+          n = length(x)
+          for(i in 1:n){
+                    filename = paste0("problem_id_",i,".txt")
+                    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+          }
+}
+ 
+#pml_write_files()
+```
+
